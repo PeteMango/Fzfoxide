@@ -1,3 +1,4 @@
+// dir/dir.go
 package dir
 
 import (
@@ -8,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/petemango/fzfoxide/pkg/fuzzy"
 )
 
 type Directory struct {
@@ -34,7 +37,6 @@ func readDatabase() ([]Directory, error) {
 		return nil, err
 	}
 
-	/* empty database */
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		return []Directory{}, nil
 	}
@@ -71,7 +73,7 @@ func writeDatabase(dirs []Directory) error {
 	return nil
 }
 
-func RecordDir(dirPath string) error {
+func RecordDirectory(dirPath string) error {
 	dirs, err := readDatabase()
 	if err != nil {
 		return err
@@ -104,24 +106,20 @@ func RecordDir(dirPath string) error {
 }
 
 func Run(input string) (string, error) {
-	/* check if its already an absolute path */
 	if filepath.IsAbs(input) {
 
-		/* if absolute, just go into that directory */
 		if info, err := os.Stat(input); err == nil && info.IsDir() {
-			err = RecordDir(input)
+			err = RecordDirectory(input)
 			if err != nil {
 				return "", err
 			}
 			return input, nil
 		}
 	} else {
-		/* check relative path */
 		absPath, err := filepath.Abs(input)
 		if err == nil {
 			if info, err := os.Stat(absPath); err == nil && info.IsDir() {
-				// found absolute path relative to this path
-				err = RecordDir(absPath)
+				err = RecordDirectory(absPath)
 				if err != nil {
 					return "", err
 				}
@@ -130,33 +128,51 @@ func Run(input string) (string, error) {
 		}
 	}
 
-	/* if not a regular cd command, look up in database */
 	dirs, err := readDatabase()
 	if err != nil {
 		return "", err
 	}
-	matches := []Directory{}
-	for _, dir := range dirs {
-		if strings.Contains(dir.Path, input) {
-			matches = append(matches, dir)
-		}
-	}
-	if len(matches) == 0 {
-		return "", fmt.Errorf("no matching directory found")
+
+	if len(dirs) == 0 {
+		return "", fmt.Errorf("no directories in the database")
 	}
 
-	/* find the most popular match */
+	type Match struct {
+		Dir        Directory
+		Similarity float64
+	}
+
+	matches := []Match{}
+	for _, dir := range dirs {
+		components := strings.Split(dir.Path, string(filepath.Separator))
+		maxSimilarity := 0.0
+		for _, component := range components {
+			similarity := fuzzy.SimilarityPercentage(strings.ToLower(component), strings.ToLower(input))
+			if similarity > maxSimilarity {
+				maxSimilarity = similarity
+			}
+		}
+		if maxSimilarity >= 50.0 {
+			matches = append(matches, Match{Dir: dir, Similarity: maxSimilarity})
+		}
+	}
+
+	if len(matches) == 0 {
+		return "", fmt.Errorf("no matching directory found with at least 50%% similarity")
+	}
+
 	bestMatch := matches[0]
 	for _, match := range matches[1:] {
-		if match.Count > bestMatch.Count {
+		if match.Similarity > bestMatch.Similarity {
+			bestMatch = match
+		} else if match.Similarity == bestMatch.Similarity && match.Dir.Count > bestMatch.Dir.Count {
 			bestMatch = match
 		}
 	}
 
-	/* record this path */
-	err = RecordDir(bestMatch.Path)
+	err = RecordDirectory(bestMatch.Dir.Path)
 	if err != nil {
 		return "", err
 	}
-	return bestMatch.Path, nil
+	return bestMatch.Dir.Path, nil
 }
