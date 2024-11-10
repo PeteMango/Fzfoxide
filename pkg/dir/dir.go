@@ -1,4 +1,3 @@
-// dir/dir.go
 package dir
 
 import (
@@ -19,15 +18,12 @@ type Directory struct {
 	LastAccessed time.Time `json:"last_accessed"`
 }
 
-func getDatabasePath() (string, error) {
+var getDatabasePath = func() (string, error) {
 	usr, err := user.Current()
-
 	if err != nil {
 		return "", err
 	}
-
 	dbPath := filepath.Join(usr.HomeDir, ".fzfoxide")
-
 	return dbPath, nil
 }
 
