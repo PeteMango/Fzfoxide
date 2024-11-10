@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"slices"
+
+	"github.com/petemango/fzfoxide/pkg/dir"
 )
 
 func usage() string {
@@ -29,7 +31,17 @@ func main() {
 	}
 
 	switch command {
-	case "run":
+	case "--run":
+		path := os.Args[2]
 
+		dir, err := dir.Run(path)
+		if err != nil {
+			fmt.Println("could not find the proper path")
+			os.Exit(1)
+		}
+		fmt.Println(dir)
+	default:
+		fmt.Printf("invalid command.\n%s", usage())
+		os.Exit(1)
 	}
 }
